@@ -51,10 +51,15 @@ pub struct Stroke {
     /// Default: 4.0
     pub miter_limit: f32,
 
-    /// A stroke line cap.
+    /// The stroke line cap on the starts of paths.
     ///
     /// Default: Butt
-    pub line_cap: LineCap,
+    pub start_line_cap: LineCap,
+
+    /// The stroke line cap on the ends of paths.
+    ///
+    /// Default: Butt
+    pub end_line_cap: LineCap,
 
     /// A stroke line join.
     ///
@@ -72,7 +77,8 @@ impl Default for Stroke {
         Stroke {
             width: 1.0,
             miter_limit: 4.0,
-            line_cap: LineCap::default(),
+            start_line_cap: LineCap::default(),
+            end_line_cap: LineCap::default(),
             line_join: LineJoin::default(),
             dash: None,
         }
@@ -219,7 +225,8 @@ pub struct PathStroker {
     segment_count: i32,
     prev_is_line: bool,
 
-    capper: CapProc,
+    start_capper: CapProc,
+    end_capper: CapProc,
     joiner: JoinProc,
 
     // outer is our working answer, inner is temp
@@ -263,7 +270,8 @@ impl PathStroker {
             segment_count: -1,
             prev_is_line: false,
 
-            capper: butt_capper,
+            start_capper: butt_capper,
+            end_capper: butt_capper,
             joiner: miter_joiner,
 
             inner: PathBuilder::new(),
@@ -312,7 +320,8 @@ impl PathStroker {
             path,
             width,
             stroke.miter_limit,
-            stroke.line_cap,
+            stroke.start_line_cap,
+            stroke.end_line_cap,
             stroke.line_join,
             resolution_scale,
         )
@@ -323,7 +332,8 @@ impl PathStroker {
         path: &Path,
         width: NonZeroPositiveF32,
         miter_limit: f32,
-        line_cap: LineCap,
+        start_cap: LineCap,
+        end_cap: LineCap,
         mut line_join: LineJoin,
         res_scale: f32,
     ) -> Option<Path> {
@@ -364,7 +374,8 @@ impl PathStroker {
         self.segment_count = -1;
         self.prev_is_line = false;
 
-        self.capper = cap_factory(line_cap);
+        self.start_capper = cap_factory(start_cap);
+        self.end_capper = cap_factory(end_cap);
         self.joiner = join_factory(line_join);
 
         // Need some estimate of how large our final result (fOuter)
@@ -409,7 +420,7 @@ impl PathStroker {
                     last_segment_is_line = false;
                 }
                 PathSegment::Close => {
-                    if line_cap != LineCap::Butt {
+                    if (start_cap != LineCap::Butt) || (end_cap != LineCap::Butt) {
                         // If the stroke consists of a moveTo followed by a close, treat it
                         // as if it were followed by a zero-length line. Lines without length
                         // can have square and round end caps.
@@ -462,7 +473,10 @@ impl PathStroker {
         let teeny_line = self
             .prev_pt
             .equals_within_tolerance(p, SCALAR_NEARLY_ZERO * self.inv_res_scale);
-        if fn_ptr_eq(self.capper, butt_capper) && teeny_line {
+        if fn_ptr_eq(self.start_capper, butt_capper)
+            && fn_ptr_eq(self.end_capper, butt_capper)
+            && teeny_line
+        {
             return;
         }
 
@@ -880,7 +894,7 @@ impl PathStroker {
                 } else {
                     None
                 };
-                (self.capper)(
+                (self.end_capper)(
                     self.prev_pt,
                     self.prev_normal,
                     pt,
@@ -895,7 +909,7 @@ impl PathStroker {
                 } else {
                     None
                 };
-                (self.capper)(
+                (self.start_capper)(
                     self.first_pt,
                     -self.first_normal,
                     self.first_outer_pt,
@@ -939,7 +953,8 @@ impl PathStroker {
             unit_normal,
         );
         if !normal_set {
-            if fn_ptr_eq(self.capper, butt_capper) {
+            if fn_ptr_eq(self.start_capper, butt_capper) && fn_ptr_eq(self.end_capper, butt_capper)
+            {
                 return false;
             }
 

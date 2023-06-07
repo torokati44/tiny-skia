@@ -401,7 +401,7 @@ impl PixmapMut<'_> {
                     // We're ignoring "errors" here, because `stroke_hairline` will return `None`
                     // when rendering a tile that doesn't have a path on it.
                     // Which is not an error in this case.
-                    Self::stroke_hairline(&path, &paint, stroke.line_cap, submask, &mut subpix);
+                    Self::stroke_hairline(&path, &paint, stroke.start_line_cap, stroke.end_line_cap, submask, &mut subpix);
 
                     let ts = Transform::from_translate(tile.x() as f32, tile.y() as f32);
                     path = match path.transform(ts) {
@@ -425,9 +425,9 @@ impl PixmapMut<'_> {
                         }
                     };
 
-                    Self::stroke_hairline(&path, &paint, stroke.line_cap, submask, subpix);
+                    Self::stroke_hairline(&path, &paint, stroke.start_line_cap, stroke.end_line_cap, submask, subpix);
                 } else {
-                    Self::stroke_hairline(path, &paint, stroke.line_cap, submask, subpix);
+                    Self::stroke_hairline(path, &paint, stroke.start_line_cap, stroke.end_line_cap, submask, subpix);
                 }
             }
         } else {
@@ -447,7 +447,8 @@ impl PixmapMut<'_> {
     fn stroke_hairline(
         path: &Path,
         paint: &Paint,
-        line_cap: LineCap,
+        start_line_cap: LineCap,
+        end_line_cap: LineCap,
         mask: Option<SubMaskRef>,
         pixmap: &mut SubPixmapMut,
     ) {
@@ -457,9 +458,9 @@ impl PixmapMut<'_> {
             None => return, // nothing to do, all good
         };
         if paint.anti_alias {
-            scan::hairline_aa::stroke_path(path, line_cap, &clip, &mut blitter);
+            scan::hairline_aa::stroke_path(path, start_line_cap, end_line_cap, &clip, &mut blitter);
         } else {
-            scan::hairline::stroke_path(path, line_cap, &clip, &mut blitter);
+            scan::hairline::stroke_path(path, start_line_cap, end_line_cap, &clip, &mut blitter);
         }
     }
 

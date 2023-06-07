@@ -29,11 +29,12 @@ const MAX_QUAD_SUBDIVIDE_LEVEL: u8 = 5;
 
 pub fn stroke_path(
     path: &Path,
-    line_cap: LineCap,
+    start_line_cap: LineCap,
+    end_line_cap: LineCap,
     clip: &ScreenIntRect,
     blitter: &mut dyn Blitter,
 ) {
-    super::hairline::stroke_path_impl(path, line_cap, clip, hair_line_rgn, blitter)
+    super::hairline::stroke_path_impl(path, start_line_cap, end_line_cap, clip, hair_line_rgn, blitter)
 }
 
 fn hair_line_rgn(points: &[Point], clip: Option<&ScreenIntRect>, blitter: &mut dyn Blitter) {
@@ -153,7 +154,8 @@ fn hair_line_rgn(points: &[Point], clip: Option<&ScreenIntRect>, blitter: &mut d
 
 pub fn stroke_path_impl(
     path: &Path,
-    line_cap: LineCap,
+    start_line_cap: LineCap,
+    end_line_cap: LineCap,
     clip: &ScreenIntRect,
     line_proc: LineProc,
     blitter: &mut dyn Blitter,
@@ -162,7 +164,7 @@ pub fn stroke_path_impl(
     let mut outset_clip = None;
 
     {
-        let cap_out = if line_cap == LineCap::Butt { 1.0 } else { 2.0 };
+        let cap_out = if start_line_cap == LineCap::Butt && end_line_cap == LineCap::Butt { 1.0 } else { 2.0 };
         let ibounds = match path
             .bounds()
             .outset(cap_out, cap_out)
@@ -217,8 +219,8 @@ pub fn stroke_path_impl(
             }
             PathSegment::LineTo(p) => {
                 let mut points = [last_pt, p];
-                if line_cap != LineCap::Butt {
-                    extend_pts(line_cap, prev_verb, next_verb, &mut points);
+                if start_line_cap != LineCap::Butt || end_line_cap != LineCap::Butt {
+                    extend_pts(start_line_cap, end_line_cap, prev_verb, next_verb, &mut points);
                 }
 
                 line_proc(&points, clip, blitter);
@@ -227,8 +229,8 @@ pub fn stroke_path_impl(
             }
             PathSegment::QuadTo(p0, p1) => {
                 let mut points = [last_pt, p0, p1];
-                if line_cap != LineCap::Butt {
-                    extend_pts(line_cap, prev_verb, next_verb, &mut points);
+                if start_line_cap != LineCap::Butt || end_line_cap != LineCap::Butt {
+                    extend_pts(start_line_cap, end_line_cap, prev_verb, next_verb, &mut points);
                 }
 
                 hair_quad(
@@ -246,8 +248,8 @@ pub fn stroke_path_impl(
             }
             PathSegment::CubicTo(p0, p1, p2) => {
                 let mut points = [last_pt, p0, p1, p2];
-                if line_cap != LineCap::Butt {
-                    extend_pts(line_cap, prev_verb, next_verb, &mut points);
+                if start_line_cap != LineCap::Butt || end_line_cap != LineCap::Butt {
+                    extend_pts(start_line_cap, end_line_cap, prev_verb, next_verb, &mut points);
                 }
 
                 hair_cubic(
@@ -264,16 +266,16 @@ pub fn stroke_path_impl(
             }
             PathSegment::Close => {
                 let mut points = [last_pt, first_pt];
-                if line_cap != LineCap::Butt && prev_verb == PathVerb::Move {
+                if start_line_cap != LineCap::Butt && end_line_cap != LineCap::Butt && prev_verb == PathVerb::Move {
                     // cap moveTo/close to match svg expectations for degenerate segments
-                    extend_pts(line_cap, prev_verb, next_verb, &mut points);
+                    extend_pts(start_line_cap, end_line_cap, prev_verb, next_verb, &mut points);
                 }
                 line_proc(&points, clip, blitter);
                 last_pt2 = points[0];
             }
         }
 
-        if line_cap != LineCap::Butt {
+        if end_line_cap != LineCap::Butt {
             if prev_verb == PathVerb::Move
                 && matches!(verb, PathVerb::Line | PathVerb::Quad | PathVerb::Cubic)
             {
@@ -292,16 +294,18 @@ pub fn stroke_path_impl(
 /// the control point, use the next control point to create a tangent. If the curve
 /// is degenerate, move the cap out 1/2 unit horizontally.
 fn extend_pts(
-    line_cap: LineCap,
+    start_line_cap: LineCap,
+    end_line_cap: LineCap,
     prev_verb: PathVerb,
     next_verb: Option<PathVerb>,
     points: &mut [Point],
 ) {
     debug_assert!(!points.is_empty()); // TODO: use non-zero slice
-    debug_assert!(line_cap != LineCap::Butt);
+    debug_assert!(start_line_cap != LineCap::Butt);
+    debug_assert!(end_line_cap != LineCap::Butt);
 
     // The area of a circle is PI*R*R. For a unit circle, R=1/2, and the cap covers half of that.
-    let cap_outset = if line_cap == LineCap::Square {
+    let cap_outset = if start_line_cap == LineCap::Square && end_line_cap == LineCap::Square {
         0.5
     } else {
         FLOAT_PI / 8.0

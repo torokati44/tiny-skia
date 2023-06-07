@@ -227,11 +227,12 @@ fn call_hline_blitter(
 
 pub fn stroke_path(
     path: &Path,
-    line_cap: LineCap,
+    start_line_cap: LineCap,
+    end_line_cap: LineCap,
     clip: &ScreenIntRect,
     blitter: &mut dyn Blitter,
 ) {
-    super::hairline::stroke_path_impl(path, line_cap, clip, anti_hair_line_rgn, blitter);
+    super::hairline::stroke_path_impl(path, start_line_cap, end_line_cap, clip, anti_hair_line_rgn, blitter);
 }
 
 fn anti_hair_line_rgn(points: &[Point], clip: Option<&ScreenIntRect>, blitter: &mut dyn Blitter) {
